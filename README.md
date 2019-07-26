@@ -1,6 +1,6 @@
-# DE0 Nano Counter
+# DE0 Nano Char
 
-A simple counter example written in VHDL for DE0 Nano.
+A tilemap example written in VHDL for DE0 Nano.
 
 Compiling:
 

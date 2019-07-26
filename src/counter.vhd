@@ -2,18 +2,25 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+use work.types.all;
+
 entity counter is
-  port(
+  port (
     clk : in std_logic;
     led : out std_logic_vector(7 downto 0)
   );
 end counter;
 
 architecture arch of counter is
-  signal x : unsigned(7 downto 0);
+  signal video_pos   : position_t;
+  signal video_sync  : sync_t;
+  signal video_blank : blank_t;
 
-  signal col      : unsigned(4 downto 0);
+  signal col : unsigned(4 downto 0);
+  signal row : unsigned(4 downto 0);
+
   signal offset_x : unsigned(2 downto 0);
+  signal offset_y : unsigned(2 downto 0);
 
   signal ram_addr : std_logic_vector(5 downto 0);
   signal ram_dout : std_logic_vector(7 downto 0);
@@ -35,38 +42,46 @@ architecture arch of counter is
   signal color : std_logic_vector(3 downto 0);
   signal pixel : std_logic_vector(3 downto 0);
 begin
-  ram: entity work.single_port_rom
-  generic map(
-    ADDR_WIDTH    => 6,
-    INIT_FILE     => "rom/tiles.mif",
-    INSTANCE_NAME => "ram"
+  ram : entity work.single_port_rom
+  generic map (
+    ADDR_WIDTH         => 6,
+    INIT_FILE          => "rom/tiles.mif",
+    ENABLE_RUNTIME_MOD => "YES"
   )
-  port map(
+  port map (
     clk  => not clk,
     addr => ram_addr,
     dout => ram_dout
   );
 
-  rom: entity work.single_port_rom
-  generic map(
+  rom : entity work.single_port_rom
+  generic map (
     ADDR_WIDTH => 15,
-    INIT_FILE  => "rom/cpu_8k.mif",
-    INSTANCE_NAME => "rom"
+    INIT_FILE  => "rom/cpu_8k.mif"
   )
-  port map(
+  port map (
     clk  => not clk,
     addr => rom_addr,
     dout => rom_dout
   );
 
-  counter: process(clk)
-  begin
-    if rising_edge(clk) then
-      x <= x + 1;
-    end if;
-  end process;
+  -- counter : process (clk)
+  -- begin
+  --   if rising_edge(clk) then
+  --     x <= x + 1;
+  --   end if;
+  -- end process;
 
-  fsm: process(clk)
+  sync_gen : entity work.sync_gen
+  port map (
+    clk   => clk,
+    cen   => '1',
+    pos   => video_pos,
+    sync  => video_sync,
+    blank => video_blank
+  );
+
+  fsm : process (clk)
   begin
     if rising_edge(clk) then
       case to_integer(offset_x) is
@@ -99,23 +114,26 @@ begin
   end process;
 
   -- latch gfx data every two pixels
-  latch_gfx_data: process(clk)
+  latch_gfx_data : process (clk)
   begin
     if rising_edge(clk) then
-      if x(0) = '1' then
+      if video_pos.x(0) = '1' then
         gfx_data <= rom_dout;
       end if;
     end if;
   end process;
 
-  col <= x(7 downto 3);
-  offset_x <= x(2 downto 0);
+  col <= video_pos.x(7 downto 3);
+  row <= video_pos.y(7 downto 3);
+
+  offset_x <= video_pos.x(2 downto 0);
+  offset_y <= video_pos.y(2 downto 0);
 
   -- load gfx data
-  rom_addr <= std_logic_vector(code & "000" & (x(2 downto 1)+1));
+  rom_addr <= std_logic_vector(code & offset_y & (offset_x(2 downto 1)+1));
 
   -- decode the high/low pixel from the gfx data
-  pixel <= gfx_data(7 downto 4) when x(0) = '1' else gfx_data(3 downto 0);
+  pixel <= gfx_data(7 downto 4) when video_pos.x(0) = '1' else gfx_data(3 downto 0);
 
   -- palette index
   led <= color & pixel;

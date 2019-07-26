@@ -27,10 +27,10 @@ use altera_mf.altera_mf_components.all;
 
 entity single_port_rom is
   generic (
-    ADDR_WIDTH    : natural := 8;
-    DATA_WIDTH    : natural := 8;
-    INIT_FILE     : string := "";
-    INSTANCE_NAME : string := ""
+    ADDR_WIDTH         : natural := 8;
+    DATA_WIDTH         : natural := 8;
+    INIT_FILE          : string := "";
+    ENABLE_RUNTIME_MOD : string := "NO"
   );
   port (
     -- clock
@@ -53,7 +53,7 @@ begin
     clock_enable_output_a  => "BYPASS",
     init_file              => INIT_FILE,
     intended_device_family => "Cyclone V",
-    lpm_hint               => "ENABLE_RUNTIME_MOD=YES,INSTANCE_NAME=" & INSTANCE_NAME,
+    lpm_hint               => "ENABLE_RUNTIME_MOD=" & ENABLE_RUNTIME_MOD,
     lpm_type               => "altsyncram",
     numwords_a             => 2**ADDR_WIDTH,
     operation_mode         => "ROM",
