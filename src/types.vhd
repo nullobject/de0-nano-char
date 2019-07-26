@@ -24,10 +24,10 @@ use ieee.numeric_std.all;
 
 package types is
   -- represents a 2D position
-  type position_t is record
+  type pos_t is record
     x : unsigned(8 downto 0);
     y : unsigned(8 downto 0);
-  end record position_t;
+  end record pos_t;
 
   -- represents the horizontal and vertical sync signals
   type sync_t is record
@@ -42,4 +42,5 @@ package types is
   end record blank_t;
 
   subtype byte_t is std_logic_vector(7 downto 0);
+  subtype nibble_t is std_logic_vector(3 downto 0);
 end package types;

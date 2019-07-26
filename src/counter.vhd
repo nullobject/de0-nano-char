@@ -7,40 +7,49 @@ use work.types.all;
 entity counter is
   port (
     clk : in std_logic;
-    led : out std_logic_vector(7 downto 0)
+    led : out byte_t
   );
 end counter;
 
 architecture arch of counter is
-  signal video_pos   : position_t;
+  -- video signals
+  signal video_pos   : pos_t;
   signal video_sync  : sync_t;
   signal video_blank : blank_t;
 
-  signal col : unsigned(4 downto 0);
-  signal row : unsigned(4 downto 0);
-
-  signal offset_x : unsigned(2 downto 0);
-  signal offset_y : unsigned(2 downto 0);
-
+  -- RAM signals
   signal ram_addr : std_logic_vector(5 downto 0);
-  signal ram_dout : std_logic_vector(7 downto 0);
+  signal ram_dout : byte_t;
 
-  signal rom_addr : std_logic_vector(14 downto 0);
-  signal rom_dout : std_logic_vector(7 downto 0);
+  -- ROM signals
+  signal tile_rom_addr : std_logic_vector(14 downto 0);
+  signal tile_rom_dout : byte_t;
 
-  -- A register that holds the colour and code for a single tile in the
-  -- tilemap. The 16-bit tile data values aren't stored contiguously in RAM,
-  -- instead they are split into high and low bytes. The high bytes are stored
-  -- in the upper-half of the RAM, while the low bytes are stored in the
-  -- lower-half.
+  -- The register that contains the colour and code of the next tile to be
+  -- rendered.
+  --
+  -- These 16-bit words aren't stored contiguously in RAM, instead they are
+  -- split into high and low bytes. The high bytes are stored in the upper-half
+  -- of the RAM, while the low bytes are stored in the lower-half.
   signal tile_data : std_logic_vector(15 downto 0);
 
-  -- A register that holds next two 4-bit pixels to be rendered.
-  signal gfx_data : std_logic_vector(7 downto 0);
+  -- The register that contains next two 4-bit pixels to be rendered.
+  signal gfx_data : byte_t;
 
-  signal code  : unsigned(9 downto 0);
-  signal color : std_logic_vector(3 downto 0);
-  signal pixel : std_logic_vector(3 downto 0);
+  -- tile code
+  signal code : unsigned(9 downto 0);
+
+  -- tile colour
+  signal color : nibble_t;
+
+  -- pixel data
+  signal pixel : nibble_t;
+
+  -- extract the components of the video position vectors
+  alias col      : unsigned(4 downto 0) is video_pos.x(7 downto 3);
+  alias row      : unsigned(4 downto 0) is video_pos.y(7 downto 3);
+  alias offset_x : unsigned(2 downto 0) is video_pos.x(2 downto 0);
+  alias offset_y : unsigned(2 downto 0) is video_pos.y(2 downto 0);
 begin
   ram : entity work.single_port_rom
   generic map (
@@ -61,16 +70,9 @@ begin
   )
   port map (
     clk  => not clk,
-    addr => rom_addr,
-    dout => rom_dout
+    addr => tile_rom_addr,
+    dout => tile_rom_dout
   );
-
-  -- counter : process (clk)
-  -- begin
-  --   if rising_edge(clk) then
-  --     x <= x + 1;
-  --   end if;
-  -- end process;
 
   sync_gen : entity work.sync_gen
   port map (
@@ -81,19 +83,20 @@ begin
     blank => video_blank
   );
 
-  fsm : process (clk)
+  -- load tile data for each 8x8 tile
+  tile_data_pipeline : process (clk)
   begin
     if rising_edge(clk) then
       case to_integer(offset_x) is
         when 2 =>
-          -- load high byte
+          -- load high byte from the char RAM
           ram_addr <= std_logic_vector('1' & col);
 
         when 3 =>
           -- latch high byte
           tile_data(15 downto 8) <= ram_dout;
 
-          -- load low byte
+          -- load low byte from the char RAM
           ram_addr <= std_logic_vector('0' & col);
 
         when 4 =>
@@ -113,26 +116,20 @@ begin
     end if;
   end process;
 
-  -- latch gfx data every two pixels
+  -- load graphics data from the tile ROM
+  tile_rom_addr <= std_logic_vector(code & offset_y & (offset_x(2 downto 1)+1));
+
+  -- latch graphics data when rendering odd pixels
   latch_gfx_data : process (clk)
   begin
     if rising_edge(clk) then
       if video_pos.x(0) = '1' then
-        gfx_data <= rom_dout;
+        gfx_data <= tile_rom_dout;
       end if;
     end if;
   end process;
 
-  col <= video_pos.x(7 downto 3);
-  row <= video_pos.y(7 downto 3);
-
-  offset_x <= video_pos.x(2 downto 0);
-  offset_y <= video_pos.y(2 downto 0);
-
-  -- load gfx data
-  rom_addr <= std_logic_vector(code & offset_y & (offset_x(2 downto 1)+1));
-
-  -- decode the high/low pixel from the gfx data
+  -- decode high/low pixels from the graphics data
   pixel <= gfx_data(7 downto 4) when video_pos.x(0) = '1' else gfx_data(3 downto 0);
 
   -- palette index
